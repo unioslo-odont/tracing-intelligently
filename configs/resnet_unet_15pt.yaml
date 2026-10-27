@@ -1,0 +1,83 @@
+# ==============================================================================
+# resnet_unet - 15-POINT HARD-TISSUE variant (Run 10 / PRESIMAL)
+# ==============================================================================
+# Auto-derived from configs/resnet_unet.yaml (the canonical 26-point Run 6 config) by
+# changing ONLY three things, so it stays bit-identical otherwise:
+#   data.landmark_config_path -> landmarks_15.yaml   (16 channels / 15 clinical points)
+#   training.checkpoint_dir   -> ./checkpoints/resnet_unet_15pt   (never overwrites Run 6)
+#   training.output_group     -> run10_15pt              (outputs/run10_15pt/... )
+# The fold split is IDENTICAL to Run 6 (same patients/seed/exclusions), so it
+# reuses the same asserted manifest (kfold.manifest_path). Do not edit by hand;
+# regenerate from the base config if Run 6's recipe changes.
+# ==============================================================================
+
+# ==============================================================================
+# ImageNet-pretrained CNN encoder + U-Net decoder - config for
+# code/training/train_backbone_variant.py and evaluate_backbone_variant.py
+# ==============================================================================
+# Same data source, seed, and kfold.k as configs/unet_baseline.yaml, so the
+# patient-level fold split (which depends only on seed + k, not on model or
+# image_size) is IDENTICAL across all backbone-comparison configs - fold N
+# here holds out exactly the same patients as fold N in every other config.
+# ==============================================================================
+
+seed: 0
+
+data:
+  images_dir: /path/to/data/images
+  fcd_dir: /path/to/data/tracings
+  review_csv_path: /path/to/data/review.csv
+  combine_method: median
+  # See unet_baseline.yaml for the rationale; kept identical here so all
+  # backbone-comparison arms train on the same vocabulary.
+  landmark_config_path: landmarks_15.yaml
+  # Optional exclusion list, path resolved relative to THIS config's dir. Names
+  # individual cases, so it is dataset-specific and git-ignored; absent = nothing
+  # excluded (warning printed). Set to null to disable.
+  exclude_images_path: excluded_images.csv
+  min_landmark_fraction: 0.5  # fallback only, unused while landmark_config_path is set
+
+  image_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+
+  # Training-time data augmentation (train split only; val/test never augmented).
+  # Enabled following the HP sweep, which found it improves accuracy - especially on
+  # the hard landmarks. Same recipe as unet_baseline; see heatmap_transform.DEFAULT_AUG.
+  augmentation:
+    enabled: true
+    params:
+      rotation_deg: 15.0
+      scale: 0.10
+      translate: 0.05
+      brightness: 0.10
+      contrast: 0.10
+
+kfold:
+  k: 5
+  fold: 0
+  # ASSERT-ONLY (added for Run 7/8/9): the patient->fold mapping is persisted in
+  # configs/folds/ and verified at every run start instead of being silently
+  # regenerated - see code/datasets/fold_manifest.py. It encodes the split this
+  # config already produced, so it changes no result; it only makes a changed
+  # patient set or exclusion list fail loudly instead of re-dealing every fold.
+  # Generate once with code/training/make_fold_manifest.py.
+  manifest_path: folds/oslo26_k5_seed0.csv
+
+model:
+  type: pretrained_encoder
+  encoder_name: resnet34   # any timm features_only model, e.g. resnet18/resnet50/convnext_tiny
+  pretrained: true
+  freeze_encoder: false    # fine-tune the whole encoder, not just the decoder
+
+training:
+  epochs: 200
+  batch_size: 8
+  lr: 0.0001               # lower than unet_baseline's 3e-4 - avoid wrecking pretrained weights early
+  weight_decay: 0.0001
+  num_workers: 4
+  device: cuda
+  checkpoint_dir: ./checkpoints/resnet_unet_15pt
+  output_group: run10_15pt  # isolates outputs/run10_15pt/<model>/ from Run 6
+  early_stopping_patience: 30
+  visualize_max_images: null

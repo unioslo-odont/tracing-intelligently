@@ -1,0 +1,4 @@
+# Encourage using the templates below; do not open blank issues.
+# (Optional: add a `contact_links` entry pointing to a maintainer contact for
+#  privacy/data-sensitive matters once the public repo URL is known.)
+blank_issues_enabled: false

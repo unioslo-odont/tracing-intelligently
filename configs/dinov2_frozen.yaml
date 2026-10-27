@@ -1,0 +1,80 @@
+# ==============================================================================
+# Frozen DINOv2 backbone + small trainable decoder - config for
+# code/training/train_backbone_variant.py and evaluate_backbone_variant.py
+# ==============================================================================
+# image_size MUST be a multiple of the DINOv2 patch size (14) - 518 = 14*37,
+# NOT the 512 the other configs use. heatmap_size is 4x the resulting patch
+# grid (37*4 = 148), fixed by dinov2_head.py's two upsampling stages.
+#
+# Same data source, seed, and kfold.k as configs/unet_baseline.yaml - see
+# resnet_unet.yaml's header comment for why that makes folds comparable
+# across all backbone-comparison configs.
+# ==============================================================================
+
+seed: 0
+
+data:
+  images_dir: /path/to/data/images
+  fcd_dir: /path/to/data/tracings
+  review_csv_path: /path/to/data/review.csv
+  combine_method: median
+  # See unet_baseline.yaml for the rationale; kept identical here so all
+  # backbone-comparison arms train on the same vocabulary.
+  landmark_config_path: landmarks.yaml
+  # Optional exclusion list, path resolved relative to THIS config's dir. Names
+  # individual cases, so it is dataset-specific and git-ignored; absent = nothing
+  # excluded (warning printed). Set to null to disable.
+  exclude_images_path: excluded_images.csv
+  min_landmark_fraction: 0.5  # fallback only, unused while landmark_config_path is set
+
+  image_size: [518, 518]
+  heatmap_size: [148, 148]
+  sigma: 2.0
+
+  # Training-time data augmentation (train split only; val/test never augmented).
+  # Enabled following the HP sweep, which found it improves accuracy - especially on
+  # the hard landmarks. Same recipe as unet_baseline; see heatmap_transform.DEFAULT_AUG.
+  augmentation:
+    enabled: true
+    params:
+      rotation_deg: 15.0
+      scale: 0.10
+      translate: 0.05
+      brightness: 0.10
+      contrast: 0.10
+
+kfold:
+  k: 5
+  fold: 0
+  # ASSERT-ONLY (added for Run 7/8/9): the patient->fold mapping is persisted in
+  # configs/folds/ and verified at every run start instead of being silently
+  # regenerated - see code/datasets/fold_manifest.py. It encodes the split this
+  # config already produced, so it changes no result; it only makes a changed
+  # patient set or exclusion list fail loudly instead of re-dealing every fold.
+  # Generate once with code/training/make_fold_manifest.py.
+  manifest_path: folds/oslo26_k5_seed0.csv
+
+model:
+  type: dinov2
+  model_name: facebook/dinov2-small   # 22M params, frozen; dinov2-base/-large are larger, still frozen
+  decoder_channels: 256
+
+training:
+  epochs: 200
+  batch_size: 8
+  lr: 0.0005               # only the small decoder head is trained - can afford a higher lr than fine-tuning arms
+  weight_decay: 0.0001
+  num_workers: 4
+  device: cuda
+  checkpoint_dir: ./checkpoints/dinov2_frozen
+  early_stopping_patience: 30
+  visualize_max_images: null
+
+  # Convergence-stability controls (see train_backbone_variant.py). Without
+  # these, DINOv2 diverged on ~40% of folds (decoder collapse; Run 5 folds 2/4
+  # failed to converge). Warmup + gradient clipping make the start stable;
+  # max_restarts re-inits and retries a fold that still fails to converge.
+  warmup_epochs: 10        # linear LR ramp 0 -> lr over the first 10 epochs
+  max_grad_norm: 1.0       # clip gradient norm each step
+  max_restarts: 2          # retry a non-converged fold with a fresh init (up to 2x)
+  convergence_ratio: 0.7   # "converged" if best val_loss < 0.7 x the epoch-0 val_loss

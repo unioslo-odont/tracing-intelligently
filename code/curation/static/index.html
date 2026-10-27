@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>OpenCeph · Tracing review</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <!-- Visible only when the page is opened from disk: style.css (served by server.py) hides it. -->
+  <div class="server-required" style="padding:16px;margin:16px;border:2px solid #c0392b;background:#fdecea;color:#5c1a14;font:15px/1.6 sans-serif">
+    <strong>This page must be opened through the workbench server.</strong> Opened directly from disk it cannot read folders or images, so its buttons do nothing.
+    Double-click <code>code\curation\start_workbench.cmd</code> (or run <code>python code/curation/server.py --open</code>) and use the page it opens at <code>http://127.0.0.1:8765</code>.
+  </div>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">◎</span><div>OpenCeph <span class="brand-divider">/</span> <span class="muted">Tracing review</span></div></div>
+    <span id="environment" class="pill">LOCAL WORKSPACE</span>
+    <div class="top-actions"><button id="open-folders" title="Choose the images and Facad folders">Open folders…</button><label class="reviewer-label">Reviewer <input id="reviewer" placeholder="Your name" maxlength="200" autocomplete="name"></label><button id="export" class="primary">Export training round <span aria-hidden="true">↗</span></button></div>
+  </header>
+  <main class="workspace">
+    <aside class="queue-panel">
+      <div class="panel-heading"><span class="eyebrow">REVIEW QUEUE</span><span id="queue-total" class="count">0</span></div>
+      <div class="progress-summary"><strong id="reviewed-count">0</strong><span class="muted"> images reviewed</span><div class="progress-track"><div id="progress-fill"></div></div><div id="counts" class="small muted"></div></div>
+      <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find an image…" aria-label="Search images"></label>
+      <select id="filter" aria-label="Filter review queue"><option value="all">All images</option><option value="pending">Awaiting review</option><option value="draft">Drafts</option><option value="accepted">Accepted</option><option value="excluded">Excluded</option><option value="warning">Import warnings</option></select>
+      <div id="queue" class="queue" aria-label="Images"></div>
+      <details id="issues-panel" class="import-issues" hidden><summary id="issues-title">Import issues</summary><ul id="issues"></ul></details>
+      <div class="queue-footer"><span class="live-dot"></span> Local storage · source files preserved</div>
+    </aside>
+    <section class="review-panel">
+      <div class="image-heading"><div><div class="eyebrow">CEPHALOGRAM</div><h1 id="image-title">Select an image</h1><p id="image-meta" class="muted small">Choose a tracing, refine its landmarks, and accept it for training.</p></div><div class="image-navigation"><button id="previous" title="Previous image [" aria-label="Previous image">←</button><span id="image-position" class="small muted"></span><button id="next" title="Next image ]" aria-label="Next image">→</button></div></div>
+      <div class="viewer-toolbar"><div class="toolbar-group"><button id="fit" title="Fit image (F)">Fit</button><button id="zoom-out" aria-label="Zoom out">−</button><span id="zoom-label" class="small mono">100%</span><button id="zoom-in" aria-label="Zoom in">+</button></div><div class="toolbar-group"><label><input id="show-labels" type="checkbox" checked> Labels</label><label><input id="show-points" type="checkbox" checked> Points</label><label><input id="compare" type="checkbox"> Compare all</label><label><input id="show-source" type="checkbox"> Source</label></div><button id="undo" title="Undo (Ctrl+Z)">↶ Undo</button><button id="redo" title="Redo (Ctrl+Shift+Z)">↷</button></div>
+      <div id="viewer" class="viewer"><svg id="canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cephalogram with editable landmark points" tabindex="0"><defs><filter id="display-filter"><feComponentTransfer><feFuncR id="red-brightness" type="linear" slope="1" intercept="0"/><feFuncG id="green-brightness" type="linear" slope="1" intercept="0"/><feFuncB id="blue-brightness" type="linear" slope="1" intercept="0"/></feComponentTransfer></filter></defs><image id="radiograph" filter="url(#display-filter)"/><g id="ghost-points"></g><g id="editable-points"></g></svg><div id="viewer-empty" class="viewer-empty"><span>◎</span><strong id="viewer-empty-title">Your next reference starts here</strong><p id="viewer-empty-text">Load an image from the queue to compare and refine its tracings.</p></div><div id="viewer-badge" class="viewer-badge" hidden></div><div class="viewer-help">Drag a point to refine · scroll to zoom · drag background to pan</div></div>
+      <div class="display-controls"><label>Brightness <input id="brightness" type="range" min="-60" max="60" value="0"></label><label>Contrast <input id="contrast" type="range" min="30" max="250" value="100"></label><button id="reset-display" class="text-button">Reset display</button><span class="small muted">Display adjustments only</span></div>
+      <div class="tracing-heading"><div><span class="eyebrow">SOURCE TRACINGS</span><span id="tracing-count" class="small muted"></span></div><span class="small muted">Select a starting reference</span></div>
+      <div id="tracings" class="tracings"></div>
+      <div id="warning" class="warning" role="status" hidden></div>
+      <footer class="review-footer"><div id="save-state" class="save-state">No image selected</div><div class="decision-actions"><button id="exclude" class="danger-quiet">Exclude image</button><button id="draft">Save draft</button><button id="accept" class="primary">Accept & next <span aria-hidden="true">→</span></button></div></footer>
+    </section>
+    <aside class="landmark-panel">
+      <div class="panel-heading"><span class="eyebrow">LANDMARKS</span><span id="landmark-count" class="count">0</span></div>
+      <p class="small muted panel-description">Select a point to inspect. Arrow keys nudge 1 px; Shift nudges 0.1 px.</p>
+      <div id="landmark-list" class="landmark-list"></div>
+      <section id="point-editor" class="point-editor" hidden><div class="point-title"><strong id="point-name"></strong><button id="focus-point" class="text-button">Locate ↗</button></div><p id="point-description" class="small muted"></p><div class="coordinate-fields"><label>X · px<input id="point-x" type="number" step="0.1"></label><label>Y · px<input id="point-y" type="number" step="0.1"></label></div><p id="point-delta" class="small mono muted"></p><div class="point-actions"><button id="restore-point">Restore source</button><button id="remove-point" class="text-button">Mark missing</button></div><p id="place-hint" class="small accent" hidden>Click the image to place this landmark.</p></section>
+      <div class="review-notes"><label for="notes" class="eyebrow">REVIEW NOTES</label><textarea id="notes" rows="3" maxlength="10000" placeholder="Quality concerns or changes made…"></textarea></div>
+      <details class="history-panel"><summary>Saved revision history</summary><div id="history" class="small muted">No saved revisions.</div></details>
+    </aside>
+  </main>
+  <dialog id="open-dialog" class="open-dialog" aria-labelledby="open-title">
+    <div class="dialog-body">
+      <h2 id="open-title">Open folders</h2>
+      <p class="small muted">Folders are read directly by the local server on this machine. Nothing is uploaded or copied; the original files stay where they are.</p>
+      <div class="folder-row"><label for="images-folder">Images folder <span class="muted">· <code>A123_1.tif</code>, <code>.png</code></span></label><div class="folder-input"><input id="images-folder" spellcheck="false" autocomplete="off" placeholder="C:\path\to\images"><button id="browse-images" type="button">Browse…</button></div></div>
+      <div class="folder-row"><label for="facad-folder">Facad folder <span class="muted">· <code>A123.fcd</code></span></label><div class="folder-input"><input id="facad-folder" spellcheck="false" autocomplete="off" placeholder="C:\path\to\data"><button id="browse-facad" type="button">Browse…</button></div></div>
+      <div class="folder-row"><label for="output-folder">Review workspace <span class="muted">· decisions are saved here</span></label><div class="folder-input"><input id="output-folder" spellcheck="false" autocomplete="off"><button id="browse-output" type="button">Browse…</button></div></div>
+      <section id="folder-picker" class="folder-picker" hidden>
+        <div class="picker-head"><strong id="picker-title"></strong><span id="picker-counts" class="small muted"></span></div>
+        <div class="picker-path"><button id="picker-up" type="button" title="Parent folder" aria-label="Parent folder">↑</button><input id="picker-path" spellcheck="false" autocomplete="off" aria-label="Current folder"><button id="picker-go" type="button">Go</button></div>
+        <div id="picker-roots" class="picker-roots"></div>
+        <div id="picker-list" class="picker-list"></div>
+        <div class="picker-actions"><button id="picker-cancel" type="button" class="text-button">Cancel</button><button id="picker-select" type="button" class="primary">Use this folder</button></div>
+      </section>
+      <p id="open-status" class="small open-status" role="status" hidden></p>
+      <div class="dialog-actions"><button id="open-cancel" type="button">Close</button><button id="open-confirm" type="button" class="primary">Open dataset</button></div>
+    </div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

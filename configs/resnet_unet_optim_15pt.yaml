@@ -1,0 +1,78 @@
+# ==============================================================================
+# resnet_unet - 15-point OPTIMIZER-CONFOUND variant (Run 7 on the 15-point set)
+# ==============================================================================
+# = configs/resnet_unet_15pt.yaml + a training.optimizer block (separate encoder/decoder
+# LRs + warm-up) + an isolated output_group/checkpoint_dir. Everything else identical.
+# ==============================================================================
+
+seed: 0
+
+data:
+  images_dir: /path/to/data/images
+  fcd_dir: /path/to/data/tracings
+  review_csv_path: /path/to/data/review.csv
+  combine_method: median
+  # See unet_baseline.yaml for the rationale; kept identical here so all
+  # backbone-comparison arms train on the same vocabulary.
+  landmark_config_path: landmarks_15.yaml
+  # Optional exclusion list, path resolved relative to THIS config's dir. Names
+  # individual cases, so it is dataset-specific and git-ignored; absent = nothing
+  # excluded (warning printed). Set to null to disable.
+  exclude_images_path: excluded_images.csv
+  min_landmark_fraction: 0.5  # fallback only, unused while landmark_config_path is set
+
+  image_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+
+  # Training-time data augmentation (train split only; val/test never augmented).
+  # Enabled following the HP sweep, which found it improves accuracy - especially on
+  # the hard landmarks. Same recipe as unet_baseline; see heatmap_transform.DEFAULT_AUG.
+  augmentation:
+    enabled: true
+    params:
+      rotation_deg: 15.0
+      scale: 0.10
+      translate: 0.05
+      brightness: 0.10
+      contrast: 0.10
+
+kfold:
+  k: 5
+  fold: 0
+  # ASSERT-ONLY (added for Run 7/8/9): the patient->fold mapping is persisted in
+  # configs/folds/ and verified at every run start instead of being silently
+  # regenerated - see code/datasets/fold_manifest.py. It encodes the split this
+  # config already produced, so it changes no result; it only makes a changed
+  # patient set or exclusion list fail loudly instead of re-dealing every fold.
+  # Generate once with code/training/make_fold_manifest.py.
+  manifest_path: folds/oslo26_k5_seed0.csv
+
+model:
+  type: pretrained_encoder
+  encoder_name: resnet34   # any timm features_only model, e.g. resnet18/resnet50/convnext_tiny
+  pretrained: true
+  freeze_encoder: false    # fine-tune the whole encoder, not just the decoder
+
+training:
+  epochs: 200
+  batch_size: 8
+  lr: 0.0001               # lower than unet_baseline's 3e-4 - avoid wrecking pretrained weights early
+  weight_decay: 0.0001
+  num_workers: 4
+  device: cuda
+  checkpoint_dir: ./checkpoints/optim_confound_15pt/resnet_unet
+  output_group: optim_confound_15pt
+  # Optimizer-confound fix (Run 7 on the 15-point set): the pretrained encoder and
+  # the random decoder+head get SEPARATE LRs with a short warm-up, instead of the
+  # single flat LR of Runs 1-10. Makes the pretrained-vs-from-scratch comparison
+  # fair. encoder_lr is a placeholder - set it from the fold-0 screen
+  # (slurm/screen_optimizer_confound.sh) before the full 5-fold run.
+  optimizer:
+    type: adam
+    decoder_lr: 0.0003      # random decoder + head: the from-scratch-scale LR
+    encoder_lr: 1.0e-4      # pretrained encoder: value selected by the fold-0 screen
+                            # (slurm/screen_optimizer_confound.sh); re-screen for your own data
+    warmup_steps: 500       # linear ramp on BOTH groups over the first 500 steps
+  early_stopping_patience: 30
+  visualize_max_images: null

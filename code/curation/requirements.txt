@@ -1,0 +1,4 @@
+# Standalone review app; the training stack / torch are not needed.
+numpy>=1.24
+Pillow>=10.0
+PyYAML>=6.0

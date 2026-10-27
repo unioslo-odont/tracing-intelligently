@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: >-
+  If you use OpenCeph in academic work, please cite the accompanying publication
+  and acknowledge the University of Oslo and the authors listed here. Replace the
+  provisional software version and add the publication DOI before release.
+title: "OpenCeph: automatic hard-tissue cephalometric landmark detection"
+type: software
+version: "0.1.0"
+date-released: "2026-09-14"
+license: Apache-2.0
+# Add the public repository URL here when the new repository is created.
+authors:
+  - family-names: Torgersen
+    given-names: Gerald
+    affiliation: University of Oslo
+  - family-names: Nesarajah
+    given-names: Arrunprashath
+    affiliation: University of Oslo
+  - family-names: Nordnes
+    given-names: Katrine Havn
+    affiliation: University of Oslo
+  - family-names: Hamran
+    given-names: Tord
+    affiliation: University of Oslo
+  - family-names: Pullisaar
+    given-names: Helen
+    affiliation: University of Oslo
+keywords:
+  - cephalometric landmark detection
+  - medical imaging
+  - heatmap regression
+  - orthodontics
+  - reproducible research
+abstract: >-
+  Open research software for heatmap-based hard-tissue cephalometric landmark
+  detection on two-dimensional lateral cephalograms.

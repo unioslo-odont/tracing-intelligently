@@ -1,0 +1,343 @@
+---
+title: "OpenCeph — per-landmark statistics across model arms"
+output:
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+Reads the `eval_val*.json` (and, where available, the matching
+`*_per_image.csv`) reports written by `evaluate.py` / `evaluate_backbone_variant.py`
+for each of the four model arms, and reports MRE / SDR per landmark and
+pooled across a target landmark set.
+
+By default `target_landmarks` is every landmark with `enabled: true` in
+`configs/landmarks.yaml` — the same source of truth `train.py` uses to
+decide what gets trained on (see `resolve_landmark_vocabulary` in
+`code/datasets/heatmap_transform.py`), so this notebook automatically tracks
+whatever you toggle there without needing to duplicate the list here. To
+look at a specific subset instead (e.g. just the four points feeding
+SNA/SNB/ANB), override it manually in the config chunk below, e.g.
+`target_landmarks <- c("A", "B", "S", "N")`.
+
+Works whether each report was produced with `--landmarks ...` (a report
+already scoped to a subset) or without it (a full all-landmark report) —
+either way this notebook pulls out just `target_landmarks` and computes an
+exact, point-count-weighted pooled MRE/SDR across them (not an
+approximation: MRE per landmark is itself a mean over disjoint points, so
+`sum(n_i * mre_i) / sum(n_i)` is the exact pooled mean, and likewise for SDR).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(jsonlite)
+library(yaml)   # install.packages("yaml") if missing - reads configs/landmarks.yaml
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(tibble)
+library(ggplot2)
+library(knitr)
+```
+
+## Configuration
+
+Edit this chunk to match your setup. If you're running this notebook
+directly on the HPC login node (where `checkpoints/` already exists),
+`checkpoint_root` just points at the repo's `checkpoints/` dir. If you're
+running it locally, `rsync`/`scp` the `checkpoints/*/fold*/eval_val*.json`
+(and `*_per_image.csv`) files down first and point `checkpoint_root` there.
+
+```{r config}
+checkpoint_root <- "../../checkpoints" # relative to code/analysis/
+landmarks_yaml_path <- "../../configs/landmarks.yaml" # relative to code/analysis/
+
+fold <- 0
+split <- "val"
+
+# Every enabled landmark in configs/landmarks.yaml, sorted for a
+# deterministic, reproducible column/axis order. Override with an explicit
+# vector (e.g. c("A", "B", "S", "N")) to narrow to a specific subset instead.
+landmark_spec <- read_yaml(landmarks_yaml_path)$landmarks
+target_landmarks <- sort(names(Filter(function(entry) isTRUE(entry$enabled), landmark_spec)))
+
+# Fixed model -> checkpoint-dir mapping. Order here fixes the color
+# assignment below (assigned by model identity, never re-ordered/re-cycled
+# if a model is later dropped from this vector).
+models <- c(
+  unet_baseline    = "unet_baseline",
+  resnet_unet      = "resnet_unet",
+  hrnet_pretrained = "hrnet_pretrained",
+  dinov2_frozen    = "dinov2_frozen"
+)
+
+# Categorical palette slots 1-4 (validated set, fixed order -> fixed hue).
+model_colors <- c(
+  unet_baseline    = "#2a78d6", # blue
+  resnet_unet      = "#1baf7a", # aqua
+  hrnet_pretrained = "#eda100", # yellow
+  dinov2_frozen    = "#008300"  # green
+)
+```
+
+## Locate eval reports
+
+Prefers a report already filtered to exactly `target_landmarks` (i.e. run
+with `evaluate.py --landmarks <target_landmarks>`); falls back to the
+full-landmark report otherwise, which this notebook then filters itself. In
+practice, when `target_landmarks` is the full enabled set from
+`landmarks.yaml` (the default), the full report already covers exactly this
+set, so the fallback path is what actually gets used - no need to re-run
+`evaluate.py` with an explicit `--landmarks` listing everything.
+
+```{r locate-json}
+landmark_suffix <- paste(target_landmarks, collapse = "-")
+
+find_eval_json <- function(model_dir) {
+  fold_dir <- file.path(checkpoint_root, model_dir, paste0("fold", fold))
+  filtered <- file.path(fold_dir, paste0("eval_", split, "_", landmark_suffix, ".json"))
+  full <- file.path(fold_dir, paste0("eval_", split, ".json"))
+
+  if (file.exists(filtered)) return(filtered)
+  if (file.exists(full)) return(full)
+  stop(
+    "No eval_", split, "*.json found in ", fold_dir, " - run\n",
+    "  python evaluate.py --checkpoint .../fold", fold, "/best.pt --split ", split, "\n",
+    "(or evaluate_backbone_variant.py for the pretrained-backbone arms) first."
+  )
+}
+
+json_paths <- map_chr(models, find_eval_json)
+tibble(model = names(json_paths), json_path = json_paths)
+```
+
+## Parse per-landmark stats
+
+```{r parse}
+read_landmark_stats <- function(model_name, json_path) {
+  report <- fromJSON(json_path, simplifyVector = FALSE)
+  per_landmark <- report$per_landmark
+
+  missing <- setdiff(target_landmarks, names(per_landmark))
+  if (length(missing) > 0) {
+    stop(
+      model_name, ": report at ", json_path, " is missing landmark(s) ",
+      paste(missing, collapse = ", "),
+      " - re-run evaluate.py without --landmarks (or with a superset that includes these)."
+    )
+  }
+
+  map_dfr(target_landmarks, function(lm) {
+    stats <- per_landmark[[lm]]
+    tibble(
+      model = model_name,
+      landmark = lm,
+      mre_mm = stats$mre_mm %||% NA_real_,
+      n_points = stats$n_points %||% 0L
+    )
+  })
+}
+
+read_sdr_long <- function(model_name, json_path) {
+  report <- fromJSON(json_path, simplifyVector = FALSE)
+  per_landmark <- report$per_landmark
+
+  map_dfr(target_landmarks, function(lm) {
+    sdr <- per_landmark[[lm]]$sdr
+    map_dfr(names(sdr), function(threshold_key) {
+      tibble(
+        model = model_name,
+        landmark = lm,
+        threshold_mm = as.numeric(threshold_key),
+        sdr = sdr[[threshold_key]] %||% NA_real_
+      )
+    })
+  })
+}
+
+landmark_stats <- map2_dfr(names(json_paths), json_paths, read_landmark_stats) |>
+  mutate(model = factor(model, levels = names(models)))
+
+sdr_long <- map2_dfr(names(json_paths), json_paths, read_sdr_long) |>
+  mutate(model = factor(model, levels = names(models)))
+
+landmark_stats
+```
+
+## Per-landmark, per-model table
+
+```{r table-per-landmark}
+sdr_wide <- sdr_long |>
+  mutate(col = paste0("sdr_", threshold_mm, "mm")) |>
+  select(model, landmark, col, sdr) |>
+  pivot_wider(names_from = col, values_from = sdr)
+
+landmark_table <- landmark_stats |>
+  left_join(sdr_wide, by = c("model", "landmark")) |>
+  arrange(landmark, model)
+
+kable(landmark_table, digits = 3)
+```
+
+## Pooled stats per model, across `target_landmarks`
+
+Point-count-weighted across all of `target_landmarks` — the exact pooled
+MRE/SDR for "how good is this model on this landmark set," not just a list
+of separate per-landmark numbers. With the default (all enabled reference
+landmarks), this is the overall reference-set summary; narrow
+`target_landmarks` in the config chunk (e.g. to `c("A", "B", "S", "N")`) to
+get the pooled figure for just the points feeding a specific downstream
+measurement like SNA/SNB/ANB instead.
+
+```{r pooled}
+pooled_mre <- landmark_stats |>
+  group_by(model) |>
+  summarise(
+    mre_mm = sum(mre_mm * n_points, na.rm = TRUE) / sum(n_points),
+    n_points = sum(n_points),
+    .groups = "drop"
+  )
+
+pooled_sdr <- sdr_long |>
+  left_join(landmark_stats |> select(model, landmark, n_points), by = c("model", "landmark")) |>
+  group_by(model, threshold_mm) |>
+  summarise(sdr = sum(sdr * n_points, na.rm = TRUE) / sum(n_points), .groups = "drop") |>
+  pivot_wider(names_from = threshold_mm, values_from = sdr, names_prefix = "sdr_")
+
+pooled <- pooled_mre |> left_join(pooled_sdr, by = "model")
+kable(pooled, digits = 3)
+```
+
+## Plot: MRE by landmark, grouped by model
+
+Figure width scales with how many landmarks are in `target_landmarks`
+(4 or 22, same chunk either way); per-bar numeric labels are dropped once
+there are too many bars to keep them readable, and the x-axis is rotated
+for the same reason.
+
+```{r plot-mre, fig.width=max(8, length(target_landmarks) * 0.55 + 2), fig.height=5}
+many_landmarks <- length(target_landmarks) > 8
+
+p_mre <- ggplot(landmark_stats, aes(x = landmark, y = mre_mm, fill = model)) +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  scale_fill_manual(values = model_colors, name = NULL) +
+  labs(x = NULL, y = "MRE (mm)", title = "Mean radial error by landmark") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "#e1e0d9", linewidth = 0.3),
+    axis.line = element_line(color = "#c3c2b7"),
+    legend.position = "top",
+    axis.text.x = element_text(
+      angle = if (many_landmarks) 45 else 0,
+      hjust = if (many_landmarks) 1 else 0.5
+    )
+  )
+
+if (!many_landmarks) {
+  p_mre <- p_mre + geom_text(
+    aes(label = sprintf("%.2f", mre_mm)),
+    position = position_dodge(width = 0.75),
+    vjust = -0.4, size = 3, color = "#0b0b0b"
+  )
+}
+
+p_mre
+```
+
+## Plot: SDR by landmark, faceted by threshold
+
+```{r plot-sdr, fig.width=max(9, length(target_landmarks) * 0.7 + 2), fig.height=6}
+many_landmarks <- length(target_landmarks) > 8  # recomputed here too, so this chunk doesn't depend on plot-mre having run first
+
+ggplot(sdr_long, aes(x = landmark, y = sdr, fill = model)) +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  scale_fill_manual(values = model_colors, name = NULL) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  facet_wrap(~ paste0(threshold_mm, " mm")) +
+  labs(x = NULL, y = "SDR", title = "Successful detection rate by landmark") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "#e1e0d9", linewidth = 0.3),
+    axis.line = element_line(color = "#c3c2b7"),
+    legend.position = "top",
+    axis.text.x = element_text(
+      angle = if (many_landmarks) 45 else 0,
+      hjust = if (many_landmarks) 1 else 0.5
+    )
+  )
+```
+
+## Per-image distribution (only where the report's scope matches `target_landmarks`)
+
+The per-image CSV's `mean_error_mm`/`max_error_mm` columns are only scoped to
+exactly `target_landmarks` if that model's report was itself produced with
+a matching `--landmarks` filter, OR the report is the full (unfiltered) one
+and its own landmark set happens to exactly equal `target_landmarks` (true
+by default: `target_landmarks` = every enabled landmark = the whole trained
+vocabulary, so the "all landmarks" aggregate already *is* the
+`target_landmarks` aggregate). Otherwise it's an aggregate over a different
+landmark set than requested, and plotting it here would silently mix in
+error from landmarks outside `target_landmarks` - this section auto-skips
+per model where that's the case.
+
+```{r per-image}
+find_matching_per_image_csv <- function(json_path) {
+  is_filtered_report <- grepl(paste0("_", landmark_suffix, "\\.json$"), json_path)
+
+  if (!is_filtered_report) {
+    # Unfiltered (full) report - only usable here if its own landmark set
+    # happens to exactly equal target_landmarks (the default case, where
+    # target_landmarks is the whole enabled vocabulary).
+    report <- fromJSON(json_path, simplifyVector = FALSE)
+    if (!setequal(names(report$per_landmark), target_landmarks)) return(NA_character_)
+  }
+
+  csv_path <- sub("\\.json$", "_per_image.csv", json_path)
+  if (file.exists(csv_path)) csv_path else NA_character_
+}
+
+per_image_csv_paths <- map_chr(json_paths, find_matching_per_image_csv)
+available <- per_image_csv_paths[!is.na(per_image_csv_paths)]
+
+if (length(available) == 0) {
+  cat(
+    "No per-image CSV scoped to exactly", landmark_suffix, "was found for any model.\n",
+    "Re-run, e.g.:\n",
+    "  python evaluate.py --checkpoint checkpoints/unet_baseline/fold", fold,
+    "/best.pt --split ", split, " --landmarks ", paste(target_landmarks, collapse = " "), "\n",
+    "to get per-image granularity scoped to just this landmark set.\n"
+  )
+} else {
+  per_image_all <- imap_dfr(available, function(csv_path, model_name) {
+    read.csv(csv_path) |> mutate(model = model_name)
+  }) |> mutate(model = factor(model, levels = names(models)))
+
+  print(
+    ggplot(per_image_all, aes(x = model, y = mean_error_mm, fill = model)) +
+      geom_boxplot(width = 0.5, outlier.shape = NA) +
+      geom_jitter(width = 0.12, size = 1, alpha = 0.5, color = "#0b0b0b") +
+      scale_fill_manual(values = model_colors, guide = "none") +
+      labs(
+        x = NULL, y = "Per-image mean error (mm)",
+        title = paste("Per-image error distribution —", landmark_suffix)
+      ) +
+      theme_minimal(base_size = 12) +
+      theme(
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_line(color = "#e1e0d9", linewidth = 0.3),
+        axis.line = element_line(color = "#c3c2b7")
+      )
+  )
+
+  cat("\nTop 5 worst images per model (by mean error over", landmark_suffix, "):\n")
+  per_image_all |>
+    group_by(model) |>
+    slice_max(mean_error_mm, n = 5) |>
+    select(model, imagefile, serial, mean_error_mm, max_error_mm) |>
+    kable(digits = 3)
+}
+```

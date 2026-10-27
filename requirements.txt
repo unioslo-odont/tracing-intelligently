@@ -1,0 +1,23 @@
+# Minimum-version requirements, not a lockfile. After setting up the venv on the
+# cluster (see slurm/setup_env.sh), run `pip freeze > requirements.lock.txt` and
+# commit that alongside the config + commit hash for a fully reproducible
+# environment - versions here are intentionally loose since the right pins depend
+# on the CUDA/PyTorch module actually available on the cluster.
+
+torch>=2.0
+numpy>=1.24
+Pillow>=10.0
+PyYAML>=6.0
+
+# code/data_preparation_TSD/convert_facad_data.py (DICOM source radiographs)
+pydicom>=2.4
+
+# comparison bar/curve + heatmap figures (compare_backbones.py,
+# aggregate_label_efficiency.py, visualize_heatmaps.py)
+matplotlib>=3.7
+
+# code/models/pretrained_encoder_unet.py (pretrained CNN/HRNet encoders)
+timm>=1.0
+
+# code/models/dinov2_head.py (frozen DINOv2 backbone)
+transformers>=4.40

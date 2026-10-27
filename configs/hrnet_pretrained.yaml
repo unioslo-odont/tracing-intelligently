@@ -1,0 +1,74 @@
+# ==============================================================================
+# ImageNet-pretrained HRNet-w32 encoder + U-Net decoder - config for
+# code/training/train_backbone_variant.py and evaluate_backbone_variant.py
+# ==============================================================================
+# NOTE: this is ImageNet CLASSIFICATION-pretrained HRNet (via timm), not
+# COCO-keypoint-pretrained - true keypoint-pretrained HRNet needs the
+# MMPose/mmcv stack, which failed to build for this project (a known,
+# recurring mmcv/setuptools compatibility break). Revisit if that becomes
+# worth the investment.
+#
+# Same data source, seed, and kfold.k as configs/unet_baseline.yaml - see
+# resnet_unet.yaml's header comment for why that makes folds comparable
+# across all backbone-comparison configs.
+# ==============================================================================
+
+seed: 0
+
+data:
+  images_dir: /path/to/data/images
+  fcd_dir: /path/to/data/tracings
+  review_csv_path: /path/to/data/review.csv
+  combine_method: median
+  # See unet_baseline.yaml for the rationale; kept identical here so all
+  # backbone-comparison arms train on the same vocabulary.
+  landmark_config_path: landmarks.yaml
+  # Optional exclusion list, path resolved relative to THIS config's dir. Names
+  # individual cases, so it is dataset-specific and git-ignored; absent = nothing
+  # excluded (warning printed). Set to null to disable.
+  exclude_images_path: excluded_images.csv
+  min_landmark_fraction: 0.5  # fallback only, unused while landmark_config_path is set
+
+  image_size: [512, 512]
+  heatmap_size: [128, 128]
+  sigma: 2.0
+
+  # Training-time data augmentation (train split only; val/test never augmented).
+  # Enabled following the HP sweep, which found it improves accuracy - especially on
+  # the hard landmarks. Same recipe as unet_baseline; see heatmap_transform.DEFAULT_AUG.
+  augmentation:
+    enabled: true
+    params:
+      rotation_deg: 15.0
+      scale: 0.10
+      translate: 0.05
+      brightness: 0.10
+      contrast: 0.10
+
+kfold:
+  k: 5
+  fold: 0
+  # ASSERT-ONLY (added for Run 7/8/9): the patient->fold mapping is persisted in
+  # configs/folds/ and verified at every run start instead of being silently
+  # regenerated - see code/datasets/fold_manifest.py. It encodes the split this
+  # config already produced, so it changes no result; it only makes a changed
+  # patient set or exclusion list fail loudly instead of re-dealing every fold.
+  # Generate once with code/training/make_fold_manifest.py.
+  manifest_path: folds/oslo26_k5_seed0.csv
+
+model:
+  type: pretrained_encoder
+  encoder_name: hrnet_w32
+  pretrained: true
+  freeze_encoder: false
+
+training:
+  epochs: 200
+  batch_size: 8
+  lr: 0.0001
+  weight_decay: 0.0001
+  num_workers: 4
+  device: cuda
+  checkpoint_dir: ./checkpoints/hrnet_pretrained
+  early_stopping_patience: 30
+  visualize_max_images: null

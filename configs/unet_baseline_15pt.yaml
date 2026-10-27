@@ -1,0 +1,112 @@
+# ==============================================================================
+# unet_baseline - 15-POINT HARD-TISSUE variant (Run 10 / PRESIMAL)
+# ==============================================================================
+# Auto-derived from configs/unet_baseline.yaml (the canonical 26-point Run 6 config) by
+# changing ONLY three things, so it stays bit-identical otherwise:
+#   data.landmark_config_path -> landmarks_15.yaml   (16 channels / 15 clinical points)
+#   training.checkpoint_dir   -> ./checkpoints/unet_baseline_15pt   (never overwrites Run 6)
+#   training.output_group     -> run10_15pt              (outputs/run10_15pt/... )
+# The fold split is IDENTICAL to Run 6 (same patients/seed/exclusions), so it
+# reuses the same asserted manifest (kfold.manifest_path). Do not edit by hand;
+# regenerate from the base config if Run 6's recipe changes.
+# ==============================================================================
+
+# ==============================================================================
+# U-Net heatmap baseline - config for code/training/train.py and evaluate.py
+# ==============================================================================
+# Every value here is saved into each checkpoint, so a checkpoint + this file's
+# git commit hash fully reproduces a run. Override individual values from the
+# CLI instead of editing this file for quick sweeps, e.g.:
+#   python train.py --config ../../configs/unet_baseline.yaml --set training.lr=0.0005
+# ==============================================================================
+
+seed: 0
+
+data:
+  images_dir: /path/to/data/images
+  fcd_dir: /path/to/data/tracings
+  # Expert tracing-selection CSV from select_reviewed_tracings.py. Set to
+  # null (not a string) to rely only on unambiguous single-tracing images.
+  review_csv_path: /path/to/data/review.csv
+  combine_method: median  # 'median' or 'geomean', used when a review selection lists more than one tracing
+
+  # Explicit, curated landmark list (see configs/landmarks.yaml) - takes
+  # priority over min_landmark_fraction below when set. This is now the
+  # primary way the trained vocabulary is controlled: toggle `enabled` per
+  # landmark in that file rather than relying on raw frequency in the data.
+  landmark_config_path: landmarks_15.yaml
+
+  # Optional exclusion list (path resolved relative to THIS config's dir): images
+  # dropped before training/eval - e.g. tracings found to be paired with a
+  # differently-sized copy of the same patient's radiograph, which offsets every
+  # landmark by a constant. The list names individual cases, so it is
+  # dataset-specific and git-ignored: if the file is absent nothing is excluded
+  # (a warning is printed). Set to null to disable the mechanism entirely.
+  exclude_images_path: excluded_images.csv
+
+  # Fallback ONLY used if landmark_config_path above is unset/null: only
+  # landmarks present in at least this fraction of images become a trained
+  # channel - see data_preparation_TSD/analyze_landmark_names.py. 0.5 is
+  # informed by this project's actual data: the real ~32-landmark protocol
+  # appears in >=50% of images, everything else (typos, one-off freehand
+  # annotations, rarer protocol variants) in well under 25%.
+  min_landmark_fraction: 0.5
+
+  # Network input resolution (width, height). Must be divisible by 16 (see
+  # code/models/unet.py: 4 encoder downsampling stages).
+  image_size: [512, 512]
+  # Heatmap target/output resolution - fixed at image_size / 4 by the U-Net's
+  # architecture (2 decoder upsampling stages). Change both together.
+  heatmap_size: [128, 128]
+  # Gaussian std-dev of each landmark's heatmap target, in heatmap pixels.
+  sigma: 2.0
+
+  # Training-time data augmentation, applied to the TRAIN split only (val/test
+  # never augmented). Random affine (rotation/scale/translation) applied
+  # consistently to image + landmarks, plus brightness/contrast jitter. NO
+  # horizontal flip (lateral cephalograms have a fixed left/right orientation).
+  # enabled: false reproduces the original no-augmentation behaviour; flip to
+  # true (e.g. via --set data.augmentation.enabled=true) for the HP sweep.
+  augmentation:
+    enabled: true   # HP-sweep winner (aug_lr1e-4 = augmentation on + lr 1e-4 below)
+    params:
+      rotation_deg: 15.0    # +/- degrees
+      scale: 0.10           # scale in [0.9, 1.1]
+      translate: 0.05       # +/- fraction of width/height
+      brightness: 0.10      # +/- additive, on [0,1] intensities
+      contrast: 0.10        # factor in [0.9, 1.1]
+
+kfold:
+  k: 5
+  fold: 0  # which fold is held out as validation this run; overridden by train.py --fold (SLURM job array index)
+  # ASSERT-ONLY (added for Run 7/8/9): the patient->fold mapping is persisted in
+  # configs/folds/ and verified at every run start instead of being silently
+  # regenerated - see code/datasets/fold_manifest.py. It encodes the split this
+  # config already produced, so it changes no result; it only makes a changed
+  # patient set or exclusion list fail loudly instead of re-dealing every fold.
+  # Generate once with code/training/make_fold_manifest.py.
+  manifest_path: folds/oslo26_k5_seed0.csv
+
+model:
+  base_channels: 32  # U-Net width; ~7.7M params at 32, ~31M at 64. Lower this first if you run out of GPU memory.
+
+training:
+  epochs: 200
+  batch_size: 8
+  lr: 0.0001   # HP-sweep winner (aug_lr1e-4); was 3e-4 for the no-aug baseline
+  weight_decay: 0.0001
+  num_workers: 4
+  device: cuda  # falls back to cpu with a warning if CUDA isn't available
+  checkpoint_dir: ./checkpoints/unet_baseline_15pt
+  output_group: run10_15pt  # isolates outputs/run10_15pt/<model>/ from Run 6
+  # Used ONLY by `train.py --all-data` (the final deployable model): fraction of
+  # patients held out purely for early stopping / best-checkpoint selection. The
+  # final model still trains on the rest (~90%, more than any CV fold). Set to 0
+  # to train the full epoch budget on 100% of the data instead. Ignored for k-fold.
+  holdout_fraction: 0.1
+  early_stopping_patience: 30  # epochs without val_loss improvement before stopping; null to disable
+  # After training, the best checkpoint's predictions on its OWN val split are
+  # rendered as ground-truth-vs-predicted overlay PNGs (see code/training/visualize.py),
+  # written to <checkpoint_dir>/fold<N>/val_overlays/. null = all val images;
+  # cap it (e.g. 20) if a fold's val split is large and you only want a quick look.
+  visualize_max_images: null

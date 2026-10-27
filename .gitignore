@@ -1,0 +1,78 @@
+# Data: patient radiographs, Facad tracings (*.fcd), derived CSVs/images.
+# Never committed - GDPR/REK/Sikt restricted, not shareable outside secure environment.
+/data/
+/outputs/
+
+# Notebooks: kept local-only. 
+/notebooks/
+
+# Living project-status doc: internal working notes (results, open issues,
+# decisions)
+/notes/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+build/
+dist/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model weights / training artifacts / logs
+*.pt
+*.pth
+*.ckpt
+outputs/
+checkpoints/
+wandb/
+
+# SLURM job logs
+*.out
+*.err
+slurm-*.out
+
+# Environment / secrets
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Fold manifests: list this cohort's (pseudonymous) patient IDs and its exact
+# composition. Reproducibility artifact for THIS dataset only - an external user
+# generates their own with code/training/make_fold_manifest.py. Not for publication.
+/configs/folds/
+
+# ---------------------------------------------------------------------------
+# LOCAL / PRIVATE project material - kept on disk, never published.
+# ---------------------------------------------------------------------------
+/local/
+/logs/
+/release-staging/
+/release-exports/
+
+# AI-assistant instructions, settings and memory, and personal working notes.
+# They describe our environment and cohort, so they stay on disk only.
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+AGENTS.md
+GEMINI.md
+.cursor/
+.github/copilot-instructions.md
+
+# Dataset-specific artifacts that name individual cases of THIS cohort.
+/configs/excluded_images.csv
+/configs/label_efficiency/

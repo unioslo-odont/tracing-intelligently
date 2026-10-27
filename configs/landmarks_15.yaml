@@ -1,0 +1,101 @@
+# ==============================================================================
+# REDUCED 15-POINT HARD-TISSUE LANDMARK SET  (Run 10 / PRESIMAL)
+# ==============================================================================
+# A hard-tissue-only subset of the 26-point Oslo protocol (configs/landmarks.yaml,
+# which stays intact and selectable). Soft-tissue landmarks are DROPPED - this is
+# now a hard-tissue cephalometric proof of concept; soft-tissue profile analysis
+# is out of scope for this run series.
+#
+# 16 trained channels = 15 clinical points, because Gonion is trained as its two
+# tangent points (iGo + pGo) and the single clinical `Go` would require a separate construction
+# (not implemented or evaluated) - there is no usable standalone `Go` marker (annotated
+# far too rarely to train). Report Go as a derived measurement point, NOT as a
+# trained-channel headline number. The current headline scores 14 direct landmarks.
+#
+# Two documented decisions (rationale recorded in the project's private notes):
+#   - `Gn` stands in for MENTON. Our `Gn` is defined as the lowest point of the
+#     mandibular symphysis = the Menton definition, and is annotated throughout
+#     the cohort (a literal `Me` marker exists but is far too rare to use). It is
+#     trained and used internally as the lower-symphysis point (mandibular plane,
+#     facial heights). Its Menton-vs-Gnathion identity is pending orthodontist
+#     confirmation, so it is marked
+#     UNCHECKABLE on Aariz (evaluate_aariz.py --unmap Gn) until confirmed - no
+#     external mapping is asserted, so the Gn-vs-constructed-Gn definition artifact
+#     cannot recur. When confirmed, Gn->Aariz Me becomes a bonus checkable point.
+#   - `Pt` is kept (well annotated) for continuity with the 26-set, though in this
+#     reduced set it feeds none of the derivable measurements and is Aariz-uncheckable.
+#
+# Every table/figure using this set MUST state "15-point hard-tissue set" explicitly
+# and must not conflate the 16 trained channels with the reported 15 clinical points.
+#
+# Keys are quoted (YAML 1.1 "Norway problem" - see configs/landmarks.yaml header).
+# ==============================================================================
+
+landmarks:
+  # --- Skeletal (10 directly-annotated + Gonion via iGo/pGo = 11 clinical) ---
+  "S":
+    enabled: true
+    category: reference
+    description: "Sella - center of the sella turcica"
+  "N":
+    enabled: true
+    category: reference
+    description: "Nasion - most anterior point of the naso-frontal suture"
+  "A":
+    enabled: true
+    category: reference
+    description: "Subspinale - deepest point on the anterior contour of the maxillary alveolar process"
+  "B":
+    enabled: true
+    category: reference
+    description: "Supramentale - deepest point on the anterior contour of the mandibular alveolar process"
+  "Po":
+    enabled: true
+    category: reference
+    description: "Porion - uppermost point of the bony external auditory meatus (anatomic; not the ear rod)"
+  "Or":
+    enabled: true
+    category: reference
+    description: "Orbitale - deepest point of the infraorbital margin"
+  "Gn":
+    enabled: true
+    category: reference
+    description: "MENTON (labelled Gn in the archive) - lowest point of the mandibular symphysis. Menton-vs-Gnathion identity pending confirmation; UNCHECKABLE on Aariz until then."
+  "Pg":
+    enabled: true
+    category: reference
+    description: "Pogonion (hard tissue) - most anterior point of the bony chin prominence"
+  "Sp":
+    enabled: true
+    category: reference
+    description: "Spina nasalis anterior (ANS) - apex of the anterior nasal spine"
+  "Pt":
+    enabled: true
+    category: reference
+    description: "Pterygoid point. Kept for 26-set continuity; feeds no derivable measurement in this reduced set and is Aariz-uncheckable."
+  "iGo":
+    enabled: true
+    category: reference
+    description: "Inferior Gonion - tangent to the posterior-inferior border of the mandibular corpus. Trained tangent channel; excluded from headline. Derived Go is not implemented."
+  "pGo":
+    enabled: true
+    category: reference
+    description: "Posterior Gonion - tangent to the posterior border of the mandibular ramus. Trained tangent channel; excluded from headline. Derived Go is not implemented."
+
+  # --- Dental (4) ---
+  "Is":
+    enabled: true
+    category: reference
+    description: "Incision superior - midpoint of the incisal edge of the most prominent central maxillary incisor"
+  "Isa":
+    enabled: true
+    category: reference
+    description: "Upper incisor apex (root tip of the most prominent central maxillary incisor)"
+  "Ii":
+    enabled: true
+    category: reference
+    description: "Incision inferior - midpoint of the incisal edge of the most prominent central mandibular incisor"
+  "Iia":
+    enabled: true
+    category: reference
+    description: "Lower incisor apex (root tip of the most prominent central mandibular incisor)"

@@ -1,0 +1,14 @@
+# ==============================================================================
+# SITE CONFIG TEMPLATE - copy to local/site.yaml (git-ignored) and edit:
+#     mkdir -p local && cp configs/site.example.yaml local/site.yaml
+# code/training/config.py deep-merges it over every config it loads, so the
+# data locations live in one private file instead of in each tracked arm config.
+# Precedence: config YAML < local/site.yaml < --set. Keep only site-specific
+# keys here; the merged values are recorded in each checkpoint and run_meta.json.
+# Set OPENCEPH_SITE_CONFIG to use a file elsewhere.
+# ==============================================================================
+
+data:
+  images_dir: /path/to/data/images        # "<serial>_<image_index>.<ext>" radiographs
+  fcd_dir: /path/to/data/tracings         # "<serial>.fcd" Facad tracings
+  review_csv_path: /path/to/data/review.csv

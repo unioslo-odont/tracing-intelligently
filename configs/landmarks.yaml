@@ -1,0 +1,204 @@
+# ==============================================================================
+# MASTER LANDMARK LIST
+# ==============================================================================
+# Single source of truth for which landmarks get trained on, across every
+# model config (referenced via `data.landmark_config_path`). Toggle
+# `enabled` per landmark; augment with new entries as needed.
+#
+# The enabled set is the 25-point Oslo lateral-ceph protocol, i.e. exactly
+# the landmarks that appear in the Facad `<binding_set>` and that the
+# `<ceph_set>` measurements are built from (SNA, SNB, ANB, NSBa, ML/NSL,
+# NL/NSL, FH, the interincisal/ILi/ILs angles, the facial axis FA/NBa, the
+# ramus line RL, the E- and S-lines, etc. - see the example tracing in
+# an example tracing under data/). Every one of these is well annotated across
+# the cohort, so
+# there is no data-starvation in the trained set (check coverage on your own
+# data with data_preparation_TSD/analyze_landmark_names.py). `GNs` is also
+# enabled: well annotated though not itself used by the Oslo ceph_set - kept
+# for soft-tissue profile work; disable it if your analyses don't need it.
+#
+# Chosen this way because frequency alone was the wrong criterion (it let in
+# rare points and left out needed ones) and so was "clinically-named in the
+# reference document" alone. The binding_set/ceph_set is the right anchor:
+# it's the actual protocol the data was traced against, AND it defines which
+# points feed which measurement - so a landmark is in iff it both has data
+# and does clinical work.
+#
+# DISABLED, and why (check frequencies for your own data with
+# analyze_landmark_names.py):
+#   - GL (Glabella) and RN (Retronasale): too sparsely annotated in this cohort
+#     AND not used by any Oslo ceph_set measurement. A point present in only a
+#     small minority of images cannot be learned, and it badly distorts the
+#     aggregate error. Re-enable only with far more annotations, and even
+#     then report them separately. Kept category `reference` because the
+#     Norwegian reference document lists them, but they are off by data+use.
+#   - The remaining `category: additional` names (T, STs, SLi, ...) are in
+#     the data but outside the Oslo binding_set/ceph_set - disabled. Some
+#     descriptions are educated guesses; verify before relying on them.
+#     NOTE `T` is well annotated but shows a catastrophic error for
+#     every architecture (annotation-quality problem) - keep disabled.
+#
+# NOTE on 'PG': the raw data has a rare marker literally spelled 'PG'
+# which used to be silently merged into 'Pg'
+# (hard-tissue Pogonion) as a same-thing-different-case-mistake - it is
+# NOT the same thing (Pg = hard-tissue Pogonion, PG = soft-tissue Pogonion
+# per this protocol) and that merge has been fixed (see facad_io.py:
+# PROTECTED_FROM_CASE_FOLDING). Given its low frequency, raw 'PG' is not
+# aliased into 'PGs' below and is not trained on - it just isn't listed.
+#
+# IMPORTANT: every landmark key below is quoted ("N", "T", ...), not bare
+# (N:, T:). This is not stylistic - YAML 1.1's implicit-typing rules treat
+# unquoted y/Y/n/N/yes/no/true/false/on/off (any case) as BOOLEANS, not
+# strings (the classic "Norway problem", where the ISO country code NO
+# parses as `false`). R's `yaml` package follows this rule for bare single
+# letters too, so an unquoted `N:` (Nasion) was previously parsed as the
+# logical FALSE, silently corrupting the landmark list read from R. Quoting
+# forces every parser (Python's PyYAML, R's yaml package, anything else) to
+# treat these as plain strings - keep new entries quoted the same way,
+# especially any future single-letter or y/n/on/off-like code.
+# ==============================================================================
+
+landmarks:
+  # --- Hard tissue (skeletal/dental) reference points ---
+  "A":
+    enabled: true
+    category: reference
+    description: "Subspinale - deepest point on the anterior contour of the maxillary alveolar process"
+  "B":
+    enabled: true
+    category: reference
+    description: "Supramentale - deepest point on the anterior contour of the mandibular alveolar process"
+  "Ba":
+    enabled: true
+    category: reference
+    description: "Basion - lowest, most posterior point on the anterior part of the occipital bone (sagittally below Porion, above the dens axis)"
+  "Gn":
+    enabled: true
+    category: reference
+    description: "Gnathion - lowest point of the mandibular symphysis"
+  "iGo":
+    enabled: true
+    category: reference
+    description: "Inferior Gonion - point tangent to the posterior-inferior border of the mandibular corpus"
+  "Ii":
+    enabled: true
+    category: reference
+    description: "Incision inferior - midpoint of the incisal edge of the most prominent central mandibular incisor"
+  "Is":
+    enabled: true
+    category: reference
+    description: "Incision superior - midpoint of the incisal edge of the most prominent central maxillary incisor"
+  "N":
+    enabled: true
+    category: reference
+    description: "Nasion - most anterior point of the naso-frontal suture"
+  "Or":
+    enabled: true
+    category: reference
+    description: "Orbitale - deepest point of the infraorbital margin"
+  "Pg":
+    enabled: true
+    category: reference
+    description: "Pogonion (hard tissue) - most anterior point of the bony chin prominence"
+  "Pm":
+    enabled: true
+    category: reference
+    description: "Pterygomaxillare - point on the dorsal maxillary contour at nasal-floor level, where it meets the hard/soft palate surface"
+  "Po":
+    enabled: true
+    category: reference
+    description: "Porion - uppermost point of the bony external auditory meatus (not the ear rod)"
+  "S":
+    enabled: true
+    category: reference
+    description: "Sella - center of the sella turcica"
+  "Sp":
+    enabled: true
+    category: reference
+    description: "Spina nasalis anterior (ANS) - apex of the anterior nasal spine"
+
+  # --- Soft tissue reference points ---
+  "GL":
+    enabled: false  # DISABLED: too sparsely annotated in this cohort AND not used by any Oslo ceph_set measurement. See header.
+    category: reference
+    description: "Soft-tissue Glabella - most anterior point of the forehead soft-tissue profile, midsagittal. Too rare to train in this cohort."
+  "MS":
+    enabled: true
+    category: reference
+    description: "Steiner's S-point - midpoint of the curvature between the upper lip and the nasal tip"
+  "PRN":
+    enabled: true
+    category: reference
+    description: "Pronasale - tip of the nose"
+  "PGs":
+    enabled: true
+    category: reference
+    description: "Soft-tissue Pogonion - most anterior point of the chin's soft-tissue profile. (Not the same as the rare raw 'PG' marker - see note above.)"
+  "PLi":
+    enabled: true
+    category: reference
+    description: "Prolabium inferior - most anterior point of the lower lip's soft-tissue profile"
+  "PLs":
+    enabled: true
+    category: reference
+    description: "Prolabium superior - most anterior point of the upper lip's soft-tissue profile"
+  "RN":
+    enabled: false  # DISABLED: too sparsely annotated in this cohort AND not used by any Oslo ceph_set measurement. See header.
+    category: reference
+    description: "Retronasale - point where the upper lip and nose form a marked angle as they cross over each other. Too rare to train in this cohort."
+  "GNs":
+    enabled: true
+    category: reference
+    description: "Soft-tissue Gnathion"
+
+  # --- Additional landmarks present in the data, outside the reference protocol above ---
+  # Disabled by default. Descriptions below are inferred from naming
+  # convention, not confirmed - verify before relying on them.
+  "Ar":
+    enabled: true
+    category: reference
+    description: "Articulare - intersection of the posterior condylar outline and the inferior cranial base outline. Oslo ceph_set: endpoint of the ramus line RL (Ar-pGo), and via RL feeds tGo (RL intersect ML)."
+  "Isa":
+    enabled: true
+    category: reference
+    description: "Upper incisor apex (root tip of the most prominent central maxillary incisor), the apex counterpart to Is. Oslo ceph_set: defines the upper-incisor long axis for InterIncisal, ILs/A-Pg, ILs/FH and ILs/NSL."
+  "Iia":
+    enabled: true
+    category: reference
+    description: "Lower incisor apex (root tip of the most prominent central mandibular incisor), the apex counterpart to Ii. Oslo ceph_set: defines the lower-incisor long axis for InterIncisal, ILi/A-Pg and ILi/ML."
+  "Pgn":
+    enabled: true
+    category: reference
+    description: "Prosthion-gnathion / facial-axis chin point on the symphysis. Oslo ceph_set: one endpoint of the facial axis FA/NBa (Pt-Pgn vs N-Ba)."
+  "Pt":
+    enabled: true
+    category: reference
+    description: "Pterygoid point at the pterygomaxillary region (distinct from Pm). Oslo ceph_set: origin of the facial axis FA/NBa (Pt-Pgn vs N-Ba)."
+  "pGo":
+    enabled: true
+    category: reference
+    description: "Posterior Gonion - point tangent to the posterior border of the mandibular ramus (posterior counterpart to iGo). Oslo ceph_set: endpoint of the ramus line RL (Ar-pGo)."
+  "SLi":
+    enabled: false
+    category: additional
+    description: "Likely Sulcus labialis inferior (lower labiomental sulcus) - not confirmed"
+  "SLs":
+    enabled: false
+    category: additional
+    description: "Likely Sulcus labialis superior (upper labiomental sulcus) - not confirmed"
+  "STs":
+    enabled: false
+    category: additional
+    description: "Not confirmed"
+  "ONs":
+    enabled: false
+    category: additional
+    description: "Not confirmed"
+  "OLp":
+    enabled: false
+    category: additional
+    description: "Not confirmed - an outline point per earlier inspection, exact anatomical definition unclear"
+  "T":
+    enabled: false
+    category: additional
+    description: "Not confirmed. NOTE: in this cohort this landmark showed a far higher error than every other landmark across all model architectures, which points at annotation inconsistency rather than model capability. Verify its annotations before enabling it."
